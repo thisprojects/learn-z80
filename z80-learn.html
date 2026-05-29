@@ -1,0 +1,1746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Z80 Assembly Lab</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e0a;
+    --panel: #0d1a0d;
+    --border: #1a3a1a;
+    --green: #00ff41;
+    --green-dim: #00a028;
+    --green-dark: #003a10;
+    --amber: #ffb000;
+    --red: #ff3333;
+    --blue: #00cfff;
+    --text: #c8ffc8;
+    --text-dim: #4a7a4a;
+    --scanline: rgba(0,0,0,0.15);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* CRT scanline overlay */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, var(--scanline) 2px, var(--scanline) 4px);
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+    flex-shrink: 0;
+  }
+  header h1 {
+    font-family: 'Orbitron', monospace;
+    font-size: 16px;
+    font-weight: 900;
+    color: var(--green);
+    letter-spacing: 3px;
+    text-shadow: 0 0 20px var(--green);
+  }
+  header .subtitle {
+    color: var(--text-dim);
+    font-size: 11px;
+    letter-spacing: 1px;
+  }
+  .spacer { flex: 1; }
+  .badge {
+    padding: 3px 8px;
+    border: 1px solid var(--green-dim);
+    color: var(--green-dim);
+    font-size: 10px;
+    letter-spacing: 1px;
+  }
+
+  .main {
+    display: grid;
+    grid-template-columns: 1fr 220px;
+    grid-template-rows: 1fr 180px;
+    gap: 1px;
+    flex: 1;
+    overflow: hidden;
+    background: var(--border);
+  }
+
+  .panel {
+    background: var(--panel);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--green-dim);
+    font-size: 11px;
+    letter-spacing: 2px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .panel-header .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+  }
+
+  /* Editor */
+  .editor-panel {
+    grid-row: 1;
+    grid-column: 1;
+  }
+  .editor-wrap {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+  .line-numbers {
+    padding: 8px 8px 8px 12px;
+    color: var(--text-dim);
+    text-align: right;
+    user-select: none;
+    min-width: 40px;
+    font-size: 12px;
+    line-height: 1.6;
+    overflow: hidden;
+    background: rgba(0,0,0,0.2);
+    border-right: 1px solid var(--border);
+  }
+  #editor {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--green);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    padding: 8px 12px;
+    resize: none;
+    caret-color: var(--green);
+    overflow-y: auto;
+    white-space: pre;
+    tab-size: 8;
+  }
+  #editor::selection { background: var(--green-dark); }
+
+  .editor-toolbar {
+    display: flex;
+    gap: 8px;
+    padding: 6px 12px;
+    border-top: 1px solid var(--border);
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .btn {
+    padding: 4px 14px;
+    border: 1px solid var(--green-dim);
+    background: transparent;
+    color: var(--green);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: all 0.1s;
+  }
+  .btn:hover { background: var(--green-dark); border-color: var(--green); box-shadow: 0 0 8px var(--green-dark); }
+  .btn.primary { border-color: var(--green); background: var(--green-dark); color: var(--green); }
+  .btn.primary:hover { background: #005020; box-shadow: 0 0 12px var(--green-dim); }
+  .btn.amber { border-color: var(--amber); color: var(--amber); }
+  .btn.amber:hover { background: #3a2800; }
+  .speed-label { color: var(--text-dim); font-size: 11px; margin-left: 8px; }
+  select.btn { padding: 4px 8px; }
+
+  /* Registers */
+  .reg-panel {
+    grid-row: 1;
+    grid-column: 2;
+  }
+  .registers {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+  }
+  .reg-group { margin-bottom: 12px; }
+  .reg-group-label {
+    color: var(--text-dim);
+    font-size: 10px;
+    letter-spacing: 2px;
+    margin-bottom: 4px;
+    padding-bottom: 2px;
+    border-bottom: 1px solid var(--border);
+  }
+  .reg-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 2px 4px;
+    margin: 1px 0;
+  }
+  .reg-name { color: var(--text-dim); font-size: 11px; min-width: 28px; }
+  .reg-val {
+    color: var(--green);
+    font-size: 12px;
+    text-align: right;
+    transition: color 0.2s, text-shadow 0.2s;
+  }
+  .reg-val.changed {
+    color: var(--amber);
+    text-shadow: 0 0 8px var(--amber);
+  }
+  .flags-row {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    padding: 4px;
+  }
+  .flag {
+    padding: 1px 5px;
+    border: 1px solid var(--border);
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .flag.set {
+    border-color: var(--green);
+    color: var(--green);
+    background: var(--green-dark);
+  }
+
+  /* Output panel */
+  .output-panel {
+    grid-row: 2;
+    grid-column: 1 / 3;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .console-area {
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .console-area .panel-header,
+  .tests-area .panel-header { flex-shrink: 0; }
+
+  #console-out {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px 12px;
+    font-size: 12px;
+    line-height: 1.7;
+  }
+  .log-info { color: var(--text-dim); }
+  .log-ok { color: var(--green); }
+  .log-err { color: var(--red); }
+  .log-warn { color: var(--amber); }
+  .log-test-pass { color: var(--green); }
+  .log-test-fail { color: var(--red); }
+
+  .tests-area {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #tests-editor {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--amber);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    padding: 6px 12px;
+    resize: none;
+    caret-color: var(--amber);
+    overflow-y: auto;
+    white-space: pre;
+  }
+  #tests-editor::selection { background: #3a2800; }
+
+  /* Memory viewer */
+  .mem-mini {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    padding: 0 12px;
+    color: var(--text-dim);
+    font-size: 11px;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+  .mem-mini input {
+    width: 50px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--green);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    padding: 2px 4px;
+    outline: none;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--green-dark); }
+
+  /* Flicker animation */
+  @keyframes flicker { 0%,100%{opacity:1} 50%{opacity:0.97} }
+  .panel { animation: flicker 8s infinite; }
+
+  .examples-bar {
+    display: flex;
+    gap: 6px;
+    padding: 0 12px;
+    margin-left: auto;
+  }
+  .ex-btn {
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    cursor: pointer;
+    letter-spacing: 0.5px;
+  }
+  .ex-btn:hover { border-color: var(--green-dim); color: var(--green); }
+
+  .halted-indicator {
+    display: none;
+    padding: 2px 8px;
+    border: 1px solid var(--amber);
+    color: var(--amber);
+    font-size: 10px;
+    animation: blink 1s infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .halted-indicator.show { display: inline-block; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Z80 ASM LAB</h1>
+  <span class="subtitle">ZILOG Z80 · INTERACTIVE LEARNING ENVIRONMENT</span>
+  <div class="spacer"></div>
+  <span class="halted-indicator" id="halted-ind">HALTED</span>
+  <span class="badge">v1.0</span>
+</header>
+
+<div class="main">
+
+  <!-- Editor -->
+  <div class="panel editor-panel">
+    <div class="panel-header">
+      <span class="dot"></span> ASSEMBLY SOURCE
+      <div class="examples-bar">
+        <button class="ex-btn" onclick="loadExample('hello')">HELLO</button>
+        <button class="ex-btn" onclick="loadExample('loop')">LOOP</button>
+        <button class="ex-btn" onclick="loadExample('fibonacci')">FIBONACCI</button>
+        <button class="ex-btn" onclick="loadExample('sort')">SORT</button>
+      </div>
+    </div>
+    <div class="editor-wrap">
+      <div class="line-numbers" id="line-nums">1</div>
+      <textarea id="editor" spellcheck="false" autocomplete="off"></textarea>
+    </div>
+    <div class="editor-toolbar">
+      <button class="btn primary" onclick="runCode()">▶ RUN</button>
+      <button class="btn" onclick="stepCode()">STEP</button>
+      <button class="btn" onclick="resetCPU()">RESET</button>
+      <button class="btn amber" onclick="runTests()">▶ RUN TESTS</button>
+      <span class="speed-label">MAX STEPS:</span>
+      <select class="btn" id="max-steps">
+        <option value="1000">1K</option>
+        <option value="10000" selected>10K</option>
+        <option value="100000">100K</option>
+        <option value="1000000">1M</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Registers -->
+  <div class="panel reg-panel">
+    <div class="panel-header"><span class="dot"></span> REGISTERS</div>
+    <div class="registers" id="reg-display">
+      <!-- populated by JS -->
+    </div>
+  </div>
+
+  <!-- Bottom split: console + tests -->
+  <div class="panel output-panel" style="background:var(--bg);gap:0;">
+    <div class="console-area">
+      <div class="panel-header">
+        <span class="dot"></span> CONSOLE OUTPUT
+        <button class="btn" style="margin-left:auto;padding:1px 8px;font-size:10px" onclick="clearConsole()">CLR</button>
+      </div>
+      <div id="console-out"></div>
+    </div>
+    <div class="tests-area">
+      <div class="panel-header">
+        <span class="dot"></span> TESTS
+        <span style="color:var(--text-dim);font-size:10px;margin-left:8px">// assert register/memory values</span>
+      </div>
+      <textarea id="tests-editor" spellcheck="false" autocomplete="off"></textarea>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+//  Z80 CPU EMULATOR
+// ═══════════════════════════════════════════════
+
+class Z80 {
+  constructor(mem) {
+    this.mem = mem; // Uint8Array(65536)
+    this.reset();
+  }
+
+  reset() {
+    // Main registers
+    this.A = 0; this.F = 0;
+    this.B = 0; this.C = 0;
+    this.D = 0; this.E = 0;
+    this.H = 0; this.L = 0;
+    // Alternate registers
+    this.A2=0; this.F2=0;
+    this.B2=0; this.C2=0;
+    this.D2=0; this.E2=0;
+    this.H2=0; this.L2=0;
+    // Index registers
+    this.IX = 0; this.IY = 0;
+    // Special
+    this.SP = 0xFFFF; this.PC = 0;
+    this.I = 0; this.R = 0;
+    this.IFF1 = 0; this.IFF2 = 0;
+    this.halted = false;
+    this.cycles = 0;
+  }
+
+  // Flag bits
+  get fS()  { return (this.F >> 7) & 1; }
+  get fZ()  { return (this.F >> 6) & 1; }
+  get fH()  { return (this.F >> 4) & 1; }
+  get fPV() { return (this.F >> 2) & 1; }
+  get fN()  { return (this.F >> 1) & 1; }
+  get fC()  { return (this.F >> 0) & 1; }
+
+  setF(s,z,h,pv,n,c) {
+    this.F = ((s&1)<<7)|((z&1)<<6)|((h&1)<<4)|((pv&1)<<2)|((n&1)<<1)|(c&1);
+  }
+  setFVal(v8, c, n, pv) {
+    const s = (v8 >> 7) & 1;
+    const z = v8 === 0 ? 1 : 0;
+    this.F = (s<<7)|(z<<6)|(0<<4)|((pv&1)<<2)|((n&1)<<1)|(c&1);
+  }
+
+  // 16-bit register pairs
+  get BC() { return (this.B<<8)|this.C; }
+  set BC(v) { this.B=(v>>8)&0xFF; this.C=v&0xFF; }
+  get DE() { return (this.D<<8)|this.E; }
+  set DE(v) { this.D=(v>>8)&0xFF; this.E=v&0xFF; }
+  get HL() { return (this.H<<8)|this.L; }
+  set HL(v) { this.H=(v>>8)&0xFF; this.L=v&0xFF; }
+  get AF() { return (this.A<<8)|this.F; }
+  set AF(v) { this.A=(v>>8)&0xFF; this.F=v&0xFF; }
+
+  rb(addr) { return this.mem[addr & 0xFFFF]; }
+  wb(addr, v) { this.mem[addr & 0xFFFF] = v & 0xFF; }
+  rw(addr) { return this.rb(addr) | (this.rb(addr+1)<<8); }
+  ww(addr, v) { this.wb(addr, v&0xFF); this.wb(addr+1, (v>>8)&0xFF); }
+
+  fetch() { const v = this.rb(this.PC); this.PC=(this.PC+1)&0xFFFF; return v; }
+  fetchW() { const lo=this.fetch(); const hi=this.fetch(); return lo|(hi<<8); }
+
+  push(v) { this.SP=(this.SP-2)&0xFFFF; this.ww(this.SP,v); }
+  pop() { const v=this.rw(this.SP); this.SP=(this.SP+2)&0xFFFF; return v; }
+
+  // Signed byte
+  sb(v) { return v >= 128 ? v - 256 : v; }
+
+  // ADD A, r
+  addA(v, carry=0) {
+    const r = this.A + v + carry;
+    const h = ((this.A & 0xF) + (v & 0xF) + carry) > 0xF ? 1 : 0;
+    const ov = (~(this.A^v) & (this.A^r) & 0x80) ? 1 : 0;
+    this.A = r & 0xFF;
+    this.setF((this.A>>7)&1, this.A===0?1:0, h, ov, 0, r>0xFF?1:0);
+  }
+  subA(v, borrow=0) {
+    const r = this.A - v - borrow;
+    const h = ((this.A & 0xF) - (v & 0xF) - borrow) < 0 ? 1 : 0;
+    const ov = ((this.A^v) & (this.A^r) & 0x80) ? 1 : 0;
+    this.A = r & 0xFF;
+    this.setF((this.A>>7)&1, this.A===0?1:0, h, ov, 1, r<0?1:0);
+  }
+  andA(v) { this.A &= v; this.setF((this.A>>7)&1, this.A===0?1:0, 1, parity(this.A), 0, 0); }
+  orA(v)  { this.A |= v; this.setF((this.A>>7)&1, this.A===0?1:0, 0, parity(this.A), 0, 0); }
+  xorA(v) { this.A ^= v; this.setF((this.A>>7)&1, this.A===0?1:0, 0, parity(this.A), 0, 0); }
+  cpA(v)  {
+    const r = this.A - v;
+    const h = ((this.A & 0xF) - (v & 0xF)) < 0 ? 1 : 0;
+    const ov = ((this.A^v) & (this.A^r) & 0x80) ? 1 : 0;
+    this.setF((r>>7)&1, r===0?1:0, h, ov, 1, r<0?1:0);
+  }
+  incR(v) {
+    const r = (v+1)&0xFF;
+    const h = (v&0xF)===0xF ? 1 : 0;
+    const ov = v===0x7F ? 1 : 0;
+    this.setF((r>>7)&1, r===0?1:0, h, ov, 0, this.fC);
+    return r;
+  }
+  decR(v) {
+    const r = (v-1)&0xFF;
+    const h = (v&0xF)===0 ? 1 : 0;
+    const ov = v===0x80 ? 1 : 0;
+    this.setF((r>>7)&1, r===0?1:0, h, ov, 1, this.fC);
+    return r;
+  }
+  rlc(v) { const c=(v>>7)&1; const r=((v<<1)|c)&0xFF; this.setF((r>>7)&1,r===0?1:0,0,parity(r),0,c); return r; }
+  rrc(v) { const c=v&1; const r=((v>>1)|(c<<7))&0xFF; this.setF((r>>7)&1,r===0?1:0,0,parity(r),0,c); return r; }
+  rl(v)  { const c=(v>>7)&1; const r=((v<<1)|this.fC)&0xFF; this.setF((r>>7)&1,r===0?1:0,0,parity(r),0,c); return r; }
+  rr(v)  { const c=v&1; const r=((v>>1)|(this.fC<<7))&0xFF; this.setF((r>>7)&1,r===0?1:0,0,parity(r),0,c); return r; }
+  sla(v) { const c=(v>>7)&1; const r=(v<<1)&0xFF; this.setF((r>>7)&1,r===0?1:0,0,parity(r),0,c); return r; }
+  sra(v) { const c=v&1; const r=((v>>1)|(v&0x80))&0xFF; this.setF((r>>7)&1,r===0?1:0,0,parity(r),0,c); return r; }
+  srl(v) { const c=v&1; const r=(v>>1)&0xFF; this.setF((r>>7)&1,r===0?1:0,0,parity(r),0,c); return r; }
+
+  addHL(v) {
+    const r = this.HL + v;
+    this.H=(r>>8)&0xFF; this.L=r&0xFF;
+    const fC = r > 0xFFFF ? 1 : 0;
+    this.F = (this.F & 0b11110100) | fC | (((this.HL & 0xFFF) < (v & 0xFFF)) ? 0x10 : 0);
+  }
+
+  getR(r) {
+    switch(r){case 0:return this.B;case 1:return this.C;case 2:return this.D;case 3:return this.E;case 4:return this.H;case 5:return this.L;case 6:return this.rb(this.HL);case 7:return this.A;}
+  }
+  setR(r,v) {
+    switch(r){case 0:this.B=v;break;case 1:this.C=v;break;case 2:this.D=v;break;case 3:this.E=v;break;case 4:this.H=v;break;case 5:this.L=v;break;case 6:this.wb(this.HL,v);break;case 7:this.A=v;break;}
+  }
+
+  step() {
+    if (this.halted) return;
+    const op = this.fetch();
+    this.R = (this.R + 1) & 0x7F;
+
+    switch(op) {
+      case 0x00: break; // NOP
+      case 0x76: this.halted = true; break; // HALT
+
+      // LD r, r'
+      case 0x40:case 0x41:case 0x42:case 0x43:case 0x44:case 0x45:case 0x46:case 0x47:
+      case 0x48:case 0x49:case 0x4A:case 0x4B:case 0x4C:case 0x4D:case 0x4E:case 0x4F:
+      case 0x50:case 0x51:case 0x52:case 0x53:case 0x54:case 0x55:case 0x56:case 0x57:
+      case 0x58:case 0x59:case 0x5A:case 0x5B:case 0x5C:case 0x5D:case 0x5E:case 0x5F:
+      case 0x60:case 0x61:case 0x62:case 0x63:case 0x64:case 0x65:case 0x66:case 0x67:
+      case 0x68:case 0x69:case 0x6A:case 0x6B:case 0x6C:case 0x6D:case 0x6E:case 0x6F:
+      case 0x70:case 0x71:case 0x72:case 0x73:case 0x74:case 0x75:           case 0x77:
+      case 0x78:case 0x79:case 0x7A:case 0x7B:case 0x7C:case 0x7D:case 0x7E:case 0x7F:
+        this.setR((op>>3)&7, this.getR(op&7)); break;
+
+      // LD r, n
+      case 0x06: this.B=this.fetch(); break;
+      case 0x0E: this.C=this.fetch(); break;
+      case 0x16: this.D=this.fetch(); break;
+      case 0x1E: this.E=this.fetch(); break;
+      case 0x26: this.H=this.fetch(); break;
+      case 0x2E: this.L=this.fetch(); break;
+      case 0x36: this.wb(this.HL, this.fetch()); break;
+      case 0x3E: this.A=this.fetch(); break;
+
+      // LD rr, nn
+      case 0x01: this.BC=this.fetchW(); break;
+      case 0x11: this.DE=this.fetchW(); break;
+      case 0x21: this.HL=this.fetchW(); break;
+      case 0x31: this.SP=this.fetchW(); break;
+
+      // LD (nn), A / A, (nn)
+      case 0x32: this.wb(this.fetchW(), this.A); break;
+      case 0x3A: this.A=this.rb(this.fetchW()); break;
+      // LD (nn), HL / HL, (nn)
+      case 0x22: { const a=this.fetchW(); this.ww(a,this.HL); break; }
+      case 0x2A: this.HL=this.rw(this.fetchW()); break;
+
+      // LD (BC/DE), A and reverse
+      case 0x02: this.wb(this.BC, this.A); break;
+      case 0x12: this.wb(this.DE, this.A); break;
+      case 0x0A: this.A=this.rb(this.BC); break;
+      case 0x1A: this.A=this.rb(this.DE); break;
+
+      // LD SP, HL
+      case 0xF9: this.SP=this.HL; break;
+
+      // INC/DEC r
+      case 0x04:this.B=this.incR(this.B);break; case 0x05:this.B=this.decR(this.B);break;
+      case 0x0C:this.C=this.incR(this.C);break; case 0x0D:this.C=this.decR(this.C);break;
+      case 0x14:this.D=this.incR(this.D);break; case 0x15:this.D=this.decR(this.D);break;
+      case 0x1C:this.E=this.incR(this.E);break; case 0x1D:this.E=this.decR(this.E);break;
+      case 0x24:this.H=this.incR(this.H);break; case 0x25:this.H=this.decR(this.H);break;
+      case 0x2C:this.L=this.incR(this.L);break; case 0x2D:this.L=this.decR(this.L);break;
+      case 0x34:this.wb(this.HL,this.incR(this.rb(this.HL)));break;
+      case 0x35:this.wb(this.HL,this.decR(this.rb(this.HL)));break;
+      case 0x3C:this.A=this.incR(this.A);break; case 0x3D:this.A=this.decR(this.A);break;
+
+      // INC/DEC rr
+      case 0x03:this.BC=(this.BC+1)&0xFFFF;break; case 0x0B:this.BC=(this.BC-1)&0xFFFF;break;
+      case 0x13:this.DE=(this.DE+1)&0xFFFF;break; case 0x1B:this.DE=(this.DE-1)&0xFFFF;break;
+      case 0x23:this.HL=(this.HL+1)&0xFFFF;break; case 0x2B:this.HL=(this.HL-1)&0xFFFF;break;
+      case 0x33:this.SP=(this.SP+1)&0xFFFF;break; case 0x3B:this.SP=(this.SP-1)&0xFFFF;break;
+
+      // ADD HL, rr
+      case 0x09:this.addHL(this.BC);break;
+      case 0x19:this.addHL(this.DE);break;
+      case 0x29:this.addHL(this.HL);break;
+      case 0x39:this.addHL(this.SP);break;
+
+      // ALU A, r
+      case 0x80:case 0x81:case 0x82:case 0x83:case 0x84:case 0x85:case 0x86:case 0x87:
+        this.addA(this.getR(op&7)); break;
+      case 0x88:case 0x89:case 0x8A:case 0x8B:case 0x8C:case 0x8D:case 0x8E:case 0x8F:
+        this.addA(this.getR(op&7),this.fC); break;
+      case 0x90:case 0x91:case 0x92:case 0x93:case 0x94:case 0x95:case 0x96:case 0x97:
+        this.subA(this.getR(op&7)); break;
+      case 0x98:case 0x99:case 0x9A:case 0x9B:case 0x9C:case 0x9D:case 0x9E:case 0x9F:
+        this.subA(this.getR(op&7),this.fC); break;
+      case 0xA0:case 0xA1:case 0xA2:case 0xA3:case 0xA4:case 0xA5:case 0xA6:case 0xA7:
+        this.andA(this.getR(op&7)); break;
+      case 0xA8:case 0xA9:case 0xAA:case 0xAB:case 0xAC:case 0xAD:case 0xAE:case 0xAF:
+        this.xorA(this.getR(op&7)); break;
+      case 0xB0:case 0xB1:case 0xB2:case 0xB3:case 0xB4:case 0xB5:case 0xB6:case 0xB7:
+        this.orA(this.getR(op&7)); break;
+      case 0xB8:case 0xB9:case 0xBA:case 0xBB:case 0xBC:case 0xBD:case 0xBE:case 0xBF:
+        this.cpA(this.getR(op&7)); break;
+
+      // ALU A, n
+      case 0xC6: this.addA(this.fetch()); break;
+      case 0xCE: this.addA(this.fetch(),this.fC); break;
+      case 0xD6: this.subA(this.fetch()); break;
+      case 0xDE: this.subA(this.fetch(),this.fC); break;
+      case 0xE6: this.andA(this.fetch()); break;
+      case 0xEE: this.xorA(this.fetch()); break;
+      case 0xF6: this.orA(this.fetch()); break;
+      case 0xFE: this.cpA(this.fetch()); break;
+
+      // Jumps
+      case 0xC3: { const a=this.fetchW(); this.PC=a; break; }
+      case 0x18: { const d=this.sb(this.fetch()); this.PC=(this.PC+d)&0xFFFF; break; }
+      case 0x20: { const d=this.sb(this.fetch()); if(!this.fZ) this.PC=(this.PC+d)&0xFFFF; break; }
+      case 0x28: { const d=this.sb(this.fetch()); if(this.fZ)  this.PC=(this.PC+d)&0xFFFF; break; }
+      case 0x30: { const d=this.sb(this.fetch()); if(!this.fC) this.PC=(this.PC+d)&0xFFFF; break; }
+      case 0x38: { const d=this.sb(this.fetch()); if(this.fC)  this.PC=(this.PC+d)&0xFFFF; break; }
+      case 0x10: { const d=this.sb(this.fetch()); this.B=(this.B-1)&0xFF; if(this.B!==0) this.PC=(this.PC+d)&0xFFFF; break; } // DJNZ
+
+      // Conditional jumps JP cc, nn
+      case 0xC2:{ const a=this.fetchW(); if(!this.fZ) this.PC=a; break; }
+      case 0xCA:{ const a=this.fetchW(); if(this.fZ)  this.PC=a; break; }
+      case 0xD2:{ const a=this.fetchW(); if(!this.fC) this.PC=a; break; }
+      case 0xDA:{ const a=this.fetchW(); if(this.fC)  this.PC=a; break; }
+      case 0xE2:{ const a=this.fetchW(); if(!this.fPV) this.PC=a; break; }
+      case 0xEA:{ const a=this.fetchW(); if(this.fPV)  this.PC=a; break; }
+      case 0xF2:{ const a=this.fetchW(); if(!this.fS) this.PC=a; break; }
+      case 0xFA:{ const a=this.fetchW(); if(this.fS)  this.PC=a; break; }
+
+      // JP (HL)
+      case 0xE9: this.PC=this.HL; break;
+
+      // CALL / RET
+      case 0xCD: { const a=this.fetchW(); this.push(this.PC); this.PC=a; break; }
+      case 0xC9: this.PC=this.pop(); break;
+      case 0xC4:{ const a=this.fetchW(); if(!this.fZ){this.push(this.PC);this.PC=a;} break; }
+      case 0xCC:{ const a=this.fetchW(); if(this.fZ) {this.push(this.PC);this.PC=a;} break; }
+      case 0xD4:{ const a=this.fetchW(); if(!this.fC){this.push(this.PC);this.PC=a;} break; }
+      case 0xDC:{ const a=this.fetchW(); if(this.fC) {this.push(this.PC);this.PC=a;} break; }
+      case 0xC0: if(!this.fZ) this.PC=this.pop(); break;
+      case 0xC8: if(this.fZ)  this.PC=this.pop(); break;
+      case 0xD0: if(!this.fC) this.PC=this.pop(); break;
+      case 0xD8: if(this.fC)  this.PC=this.pop(); break;
+      case 0xE0: if(!this.fPV) this.PC=this.pop(); break;
+      case 0xE8: if(this.fPV)  this.PC=this.pop(); break;
+      case 0xF0: if(!this.fS) this.PC=this.pop(); break;
+      case 0xF8: if(this.fS)  this.PC=this.pop(); break;
+
+      // RST
+      case 0xC7:case 0xCF:case 0xD7:case 0xDF:case 0xE7:case 0xEF:case 0xF7:case 0xFF:
+        this.push(this.PC); this.PC=(op&0x38); break;
+
+      // PUSH/POP
+      case 0xC5: this.push(this.BC); break; case 0xC1: this.BC=this.pop(); break;
+      case 0xD5: this.push(this.DE); break; case 0xD1: this.DE=this.pop(); break;
+      case 0xE5: this.push(this.HL); break; case 0xE1: this.HL=this.pop(); break;
+      case 0xF5: this.push(this.AF); break; case 0xF1: this.AF=this.pop(); break;
+
+      // EX
+      case 0xEB: { const t=this.DE; this.DE=this.HL; this.HL=t; break; }
+      case 0x08: { const ta=this.A,tf=this.F; this.A=this.A2;this.F=this.F2;this.A2=ta;this.F2=tf; break; }
+      case 0xD9: {
+        let t;
+        t=this.B;this.B=this.B2;this.B2=t;
+        t=this.C;this.C=this.C2;this.C2=t;
+        t=this.D;this.D=this.D2;this.D2=t;
+        t=this.E;this.E=this.E2;this.E2=t;
+        t=this.H;this.H=this.H2;this.H2=t;
+        t=this.L;this.L=this.L2;this.L2=t;
+        break;
+      }
+      case 0xE3: { const lo=this.rb(this.SP),hi=this.rb(this.SP+1); this.wb(this.SP,this.L);this.wb(this.SP+1,this.H); this.H=hi;this.L=lo; break; } // EX (SP), HL
+
+      // RLCA/RRCA/RLA/RRA
+      case 0x07: { const c=(this.A>>7)&1; this.A=((this.A<<1)|c)&0xFF; this.F=(this.F&0xC4)|c; break; }
+      case 0x0F: { const c=this.A&1; this.A=((this.A>>1)|(c<<7))&0xFF; this.F=(this.F&0xC4)|c; break; }
+      case 0x17: { const c=(this.A>>7)&1; this.A=((this.A<<1)|this.fC)&0xFF; this.F=(this.F&0xC4)|c; break; }
+      case 0x1F: { const c=this.A&1; this.A=((this.A>>1)|(this.fC<<7))&0xFF; this.F=(this.F&0xC4)|c; break; }
+
+      // DAA
+      case 0x27: {
+        let a=this.A, c=this.fC, h=this.fH, n=this.fN;
+        if(!n) { if(h||(a&0xF)>9) a+=6; if(c||a>0x99){a+=0x60;c=1;} }
+        else   { if(h) a=(a-6)&0xFF; if(c) a=(a-0x60)&0xFF; }
+        this.F=(this.F&0x02)|((a&0x80)?0x80:0)|((a&0xFF)?0:0x40)|parity(a&0xFF)<<2|c;
+        this.A=a&0xFF; break;
+      }
+      case 0x2F: this.A^=0xFF; this.F|=0x12; break; // CPL
+      case 0x3F: { const c=this.fC; this.F=(this.F&0xC4)|((c^1)&1)|(c<<4); break; } // CCF
+      case 0x37: this.F=(this.F&0xC4)|1; break; // SCF
+
+      // CB prefix - bit ops
+      case 0xCB: this.execCB(); break;
+      // DD prefix - IX ops
+      case 0xDD: this.execDD(); break;
+      // FD prefix - IY ops
+      case 0xFD: this.execFD(); break;
+      // ED prefix
+      case 0xED: this.execED(); break;
+
+      // IN/OUT (simplified - no real I/O)
+      case 0xDB: this.fetch(); break; // IN A,(n)
+      case 0xD3: this.fetch(); break; // OUT (n),A
+
+      default: break; // unimplemented = NOP
+    }
+    this.cycles++;
+  }
+
+  execCB() {
+    const op=this.fetch();
+    const r=op&7;
+    const bit=(op>>3)&7;
+    switch((op>>6)&3) {
+      case 0: { // rotate/shift
+        const fn=[this.rlc,this.rrc,this.rl,this.rr,this.sla,this.sra,(v)=>{const c=(v>>7)&1;const r=((v<<1)|1)&0xFF;this.setF((r>>7)&1,r===0?1:0,0,parity(r),0,c);return r;},this.srl];
+        this.setR(r, fn[bit].call(this, this.getR(r))); break;
+      }
+      case 1: { // BIT
+        const v=this.getR(r)&(1<<bit);
+        this.F=(this.F&0x01)|0x10|(v?0:0x44)|(v&0x80); break;
+      }
+      case 2: this.setR(r, this.getR(r)&~(1<<bit)); break; // RES
+      case 3: this.setR(r, this.getR(r)|(1<<bit)); break;   // SET
+    }
+  }
+
+  execDD() {
+    const op=this.fetch();
+    switch(op) {
+      case 0x21: this.IX=this.fetchW(); break;
+      case 0x22: this.ww(this.fetchW(),this.IX); break;
+      case 0x2A: this.IX=this.rw(this.fetchW()); break;
+      case 0x36: { const d=this.sb(this.fetch()); const n=this.fetch(); this.wb((this.IX+d)&0xFFFF,n); break; }
+      case 0x46: { const d=this.sb(this.fetch()); this.B=this.rb((this.IX+d)&0xFFFF); break; }
+      case 0x4E: { const d=this.sb(this.fetch()); this.C=this.rb((this.IX+d)&0xFFFF); break; }
+      case 0x56: { const d=this.sb(this.fetch()); this.D=this.rb((this.IX+d)&0xFFFF); break; }
+      case 0x5E: { const d=this.sb(this.fetch()); this.E=this.rb((this.IX+d)&0xFFFF); break; }
+      case 0x66: { const d=this.sb(this.fetch()); this.H=this.rb((this.IX+d)&0xFFFF); break; }
+      case 0x6E: { const d=this.sb(this.fetch()); this.L=this.rb((this.IX+d)&0xFFFF); break; }
+      case 0x7E: { const d=this.sb(this.fetch()); this.A=this.rb((this.IX+d)&0xFFFF); break; }
+      case 0x70: { const d=this.sb(this.fetch()); this.wb((this.IX+d)&0xFFFF,this.B); break; }
+      case 0x71: { const d=this.sb(this.fetch()); this.wb((this.IX+d)&0xFFFF,this.C); break; }
+      case 0x72: { const d=this.sb(this.fetch()); this.wb((this.IX+d)&0xFFFF,this.D); break; }
+      case 0x73: { const d=this.sb(this.fetch()); this.wb((this.IX+d)&0xFFFF,this.E); break; }
+      case 0x74: { const d=this.sb(this.fetch()); this.wb((this.IX+d)&0xFFFF,this.H); break; }
+      case 0x75: { const d=this.sb(this.fetch()); this.wb((this.IX+d)&0xFFFF,this.L); break; }
+      case 0x77: { const d=this.sb(this.fetch()); this.wb((this.IX+d)&0xFFFF,this.A); break; }
+      case 0x86: { const d=this.sb(this.fetch()); this.addA(this.rb((this.IX+d)&0xFFFF)); break; }
+      case 0x96: { const d=this.sb(this.fetch()); this.subA(this.rb((this.IX+d)&0xFFFF)); break; }
+      case 0xBE: { const d=this.sb(this.fetch()); this.cpA(this.rb((this.IX+d)&0xFFFF)); break; }
+      case 0x23: this.IX=(this.IX+1)&0xFFFF; break;
+      case 0x2B: this.IX=(this.IX-1)&0xFFFF; break;
+      case 0xE5: this.push(this.IX); break;
+      case 0xE1: this.IX=this.pop(); break;
+      case 0xE9: this.PC=this.IX; break;
+      case 0xF9: this.SP=this.IX; break;
+      default: break;
+    }
+  }
+
+  execFD() {
+    const op=this.fetch();
+    switch(op) {
+      case 0x21: this.IY=this.fetchW(); break;
+      case 0x22: this.ww(this.fetchW(),this.IY); break;
+      case 0x2A: this.IY=this.rw(this.fetchW()); break;
+      case 0x36: { const d=this.sb(this.fetch()); const n=this.fetch(); this.wb((this.IY+d)&0xFFFF,n); break; }
+      case 0x46: { const d=this.sb(this.fetch()); this.B=this.rb((this.IY+d)&0xFFFF); break; }
+      case 0x4E: { const d=this.sb(this.fetch()); this.C=this.rb((this.IY+d)&0xFFFF); break; }
+      case 0x56: { const d=this.sb(this.fetch()); this.D=this.rb((this.IY+d)&0xFFFF); break; }
+      case 0x5E: { const d=this.sb(this.fetch()); this.E=this.rb((this.IY+d)&0xFFFF); break; }
+      case 0x66: { const d=this.sb(this.fetch()); this.H=this.rb((this.IY+d)&0xFFFF); break; }
+      case 0x6E: { const d=this.sb(this.fetch()); this.L=this.rb((this.IY+d)&0xFFFF); break; }
+      case 0x7E: { const d=this.sb(this.fetch()); this.A=this.rb((this.IY+d)&0xFFFF); break; }
+      case 0x70: { const d=this.sb(this.fetch()); this.wb((this.IY+d)&0xFFFF,this.B); break; }
+      case 0x77: { const d=this.sb(this.fetch()); this.wb((this.IY+d)&0xFFFF,this.A); break; }
+      case 0x86: { const d=this.sb(this.fetch()); this.addA(this.rb((this.IY+d)&0xFFFF)); break; }
+      case 0x96: { const d=this.sb(this.fetch()); this.subA(this.rb((this.IY+d)&0xFFFF)); break; }
+      case 0xBE: { const d=this.sb(this.fetch()); this.cpA(this.rb((this.IY+d)&0xFFFF)); break; }
+      case 0x23: this.IY=(this.IY+1)&0xFFFF; break;
+      case 0x2B: this.IY=(this.IY-1)&0xFFFF; break;
+      case 0xE5: this.push(this.IY); break;
+      case 0xE1: this.IY=this.pop(); break;
+      case 0xE9: this.PC=this.IY; break;
+      default: break;
+    }
+  }
+
+  execED() {
+    const op=this.fetch();
+    switch(op) {
+      case 0x57: this.A=this.I; break; // LD A,I
+      case 0x5F: this.A=this.R; break; // LD A,R
+      case 0x47: this.I=this.A; break; // LD I,A
+      case 0x4F: this.R=this.A; break; // LD R,A
+      case 0x43: this.ww(this.fetchW(),this.BC); break; // LD (nn),BC
+      case 0x53: this.ww(this.fetchW(),this.DE); break;
+      case 0x63: this.ww(this.fetchW(),this.HL); break;
+      case 0x73: this.ww(this.fetchW(),this.SP); break;
+      case 0x4B: this.BC=this.rw(this.fetchW()); break;
+      case 0x5B: this.DE=this.rw(this.fetchW()); break;
+      case 0x6B: this.HL=this.rw(this.fetchW()); break;
+      case 0x7B: this.SP=this.rw(this.fetchW()); break;
+      // LDI
+      case 0xA0: {
+        this.wb(this.DE, this.rb(this.HL));
+        this.DE=(this.DE+1)&0xFFFF; this.HL=(this.HL+1)&0xFFFF;
+        this.BC=(this.BC-1)&0xFFFF;
+        this.F=(this.F&0xC1)|(this.BC?0x04:0); break;
+      }
+      // LDD
+      case 0xA8: {
+        this.wb(this.DE, this.rb(this.HL));
+        this.DE=(this.DE-1)&0xFFFF; this.HL=(this.HL-1)&0xFFFF;
+        this.BC=(this.BC-1)&0xFFFF;
+        this.F=(this.F&0xC1)|(this.BC?0x04:0); break;
+      }
+      // LDIR
+      case 0xB0: {
+        do {
+          this.wb(this.DE, this.rb(this.HL));
+          this.DE=(this.DE+1)&0xFFFF; this.HL=(this.HL+1)&0xFFFF;
+          this.BC=(this.BC-1)&0xFFFF; this.cycles++;
+        } while(this.BC!==0);
+        this.F&=0xC1; break;
+      }
+      // LDDR
+      case 0xB8: {
+        do {
+          this.wb(this.DE, this.rb(this.HL));
+          this.DE=(this.DE-1)&0xFFFF; this.HL=(this.HL-1)&0xFFFF;
+          this.BC=(this.BC-1)&0xFFFF; this.cycles++;
+        } while(this.BC!==0);
+        this.F&=0xC1; break;
+      }
+      // NEG
+      case 0x44: { const a=this.A; this.A=0; this.subA(a); break; }
+      // RETI / RETN
+      case 0x45: case 0x4D: this.PC=this.pop(); break;
+      // CPI
+      case 0xA1: {
+        const v=this.rb(this.HL); const r=this.A-v;
+        this.HL=(this.HL+1)&0xFFFF; this.BC=(this.BC-1)&0xFFFF;
+        this.F=(this.F&0x01)|((r&0x80)?0x80:0)|(r===0?0x40:0)|0x02|(this.BC?0x04:0)|((this.A&0xF)<(v&0xF)?0x10:0);
+        break;
+      }
+      // CPIR
+      case 0xB1: {
+        let r;
+        do {
+          const v=this.rb(this.HL); r=this.A-v;
+          this.HL=(this.HL+1)&0xFFFF; this.BC=(this.BC-1)&0xFFFF; this.cycles++;
+        } while(this.BC!==0 && r!==0);
+        this.F=(this.F&0x01)|((r&0x80)?0x80:0)|(r===0?0x40:0)|0x02|(this.BC?0x04:0);
+        break;
+      }
+      // IN r,(C)
+      case 0x40: this.B=0; break; case 0x48: this.C=0; break;
+      case 0x50: this.D=0; break; case 0x58: this.E=0; break;
+      case 0x60: this.H=0; break; case 0x68: this.L=0; break;
+      case 0x78: this.A=0; break;
+      default: break;
+    }
+  }
+}
+
+function parity(v) {
+  v ^= v>>4; v ^= v>>2; v ^= v>>1; return (~v)&1;
+}
+
+// ═══════════════════════════════════════════════
+//  Z80 ASSEMBLER
+// ═══════════════════════════════════════════════
+
+function assemble(src) {
+  const lines = src.split('\n');
+  const labels = {};
+  const output = [];
+  const errors = [];
+  let addr = 0;
+
+  // Two-pass assembler
+  for (let pass = 0; pass < 2; pass++) {
+    addr = 0;
+    output.length = 0;
+
+    for (let ln = 0; ln < lines.length; ln++) {
+      let line = lines[ln];
+      // Remove comments
+      const ci = line.indexOf(';');
+      if (ci >= 0) line = line.substring(0, ci);
+      line = line.trim();
+      if (!line) continue;
+
+      // Label?
+      const labelMatch = line.match(/^(\w+):/);
+      if (labelMatch) {
+        if (pass === 0) labels[labelMatch[1].toUpperCase()] = addr;
+        line = line.substring(labelMatch[0].length).trim();
+        if (!line) continue;
+      }
+
+      // ORG directive
+      if (/^ORG\s+/i.test(line)) {
+        addr = parseNum(line.replace(/^ORG\s+/i, '').trim());
+        continue;
+      }
+      // DB directive
+      if (/^DB\s+/i.test(line)) {
+        const args = line.replace(/^DB\s+/i, '').split(',').map(s=>s.trim());
+        for (const a of args) {
+          if (a.startsWith('"') || a.startsWith("'")) {
+            const str = a.slice(1,-1);
+            for (let i=0;i<str.length;i++) { output[addr++]=str.charCodeAt(i); }
+          } else {
+            output[addr++] = parseNum(a) & 0xFF;
+          }
+        }
+        continue;
+      }
+      // DW directive
+      if (/^DW\s+/i.test(line)) {
+        const args = line.replace(/^DW\s+/i, '').split(',').map(s=>s.trim());
+        for (const a of args) {
+          const v = resolveLabel(a, labels, addr, pass);
+          output[addr++] = v & 0xFF;
+          output[addr++] = (v >> 8) & 0xFF;
+        }
+        continue;
+      }
+      // DS directive (define space)
+      if (/^DS\s+/i.test(line)) {
+        const n = parseNum(line.replace(/^DS\s+/i, '').trim());
+        for (let i=0;i<n;i++) output[addr++]=0;
+        continue;
+      }
+      // EQU directive
+      if (/^\w+\s+EQU\s+/i.test(line)) {
+        const m = line.match(/^(\w+)\s+EQU\s+(.+)/i);
+        if (m && pass===0) labels[m[1].toUpperCase()] = parseNum(m[2].trim());
+        continue;
+      }
+
+      try {
+        const bytes = asmLine(line, addr, labels, pass);
+        for (const b of bytes) output[addr++] = b;
+      } catch(e) {
+        if (pass===1) errors.push(`Line ${ln+1}: ${e.message} [${line}]`);
+        addr++; // assume 1 byte to keep addresses moving
+      }
+    }
+  }
+  return { bytes: output, labels, errors, size: addr };
+}
+
+function resolveLabel(s, labels, addr, pass) {
+  s = s.trim().toUpperCase();
+  if (labels[s] !== undefined) return labels[s];
+  if (pass === 0) return 0; // placeholder
+  const n = parseNum(s);
+  if (!isNaN(n)) return n;
+  throw new Error(`Unknown label: ${s}`);
+}
+
+function parseNum(s) {
+  s = s.trim();
+  if (!s) return 0;
+  if (s.startsWith('0x') || s.startsWith('0X')) return parseInt(s, 16);
+  if (s.endsWith('H') || s.endsWith('h')) return parseInt(s.slice(0,-1), 16);
+  if (s.endsWith('B') || s.endsWith('b')) return parseInt(s.slice(0,-1), 2);
+  if (s.startsWith('%')) return parseInt(s.slice(1), 2);
+  if (s.startsWith('$')) {
+    if (s.length===1) return 0; // current addr placeholder - handled elsewhere
+    return parseInt(s.slice(1), 16);
+  }
+  const n = parseInt(s, 10);
+  if (isNaN(n)) return 0;
+  return n;
+}
+
+const REGS8  = {A:7,B:0,C:1,D:2,E:3,H:4,L:5};
+const REGS16 = {BC:0,DE:1,HL:2,SP:3};
+const REGS16AF = {BC:0,DE:1,HL:2,AF:3};
+const CC = {NZ:0,Z:1,NC:2,C:3,PO:4,PE:5,P:6,M:7};
+
+function asmLine(line, addr, labels, pass) {
+  // Tokenize
+  const tokens = line.toUpperCase().replace(/,/g,' , ').replace(/\(/g,' ( ').replace(/\)/g,' ) ').split(/\s+/).filter(Boolean);
+  if (!tokens.length) return [];
+  const mnem = tokens[0];
+
+  const getN8 = (s) => {
+    if (s in labels) return labels[s]&0xFF;
+    const v = parseNum(s); return v&0xFF;
+  };
+  const getN16 = (s) => {
+    if (s.toUpperCase() in labels) return labels[s.toUpperCase()]&0xFFFF;
+    if (s==='$') return addr;
+    return parseNum(s)&0xFFFF;
+  };
+  const getLabel = (s) => {
+    const u = s.toUpperCase();
+    if (pass===0) return 0;
+    if (u in labels) return labels[u];
+    return parseNum(s);
+  };
+  const rel = (s) => {
+    const target = getLabel(s);
+    const off = target - (addr + 2);
+    if (off < -128 || off > 127) throw new Error(`Relative jump out of range: ${off}`);
+    return off & 0xFF;
+  };
+
+  // Remove parens helper
+  const stripParens = (s) => s.replace(/^\(|\)$/g,'');
+  const isParens = (s) => s.startsWith('(') || (tokens.indexOf('(')>=0 && tokens.indexOf(')')>=0);
+
+  // Reconstruct operand strings
+  const raw = line.trim().substring(mnem.length).trim();
+  const ops = splitOps(raw);
+
+  switch(mnem) {
+    case 'NOP': return [0x00];
+    case 'HALT': return [0x76];
+    case 'SCF': return [0x37];
+    case 'CCF': return [0x3F];
+    case 'CPL': return [0x2F];
+    case 'DAA': return [0x27];
+    case 'EI': return [0xFB];
+    case 'DI': return [0xF3];
+    case 'RLCA': return [0x07];
+    case 'RRCA': return [0x0F];
+    case 'RLA': return [0x17];
+    case 'RRA': return [0x1F];
+    case 'EXX': return [0xD9];
+    case 'RETI': return [0xED,0x4D];
+    case 'RETN': return [0xED,0x45];
+    case 'NEG': return [0xED,0x44];
+    case 'LDIR': return [0xED,0xB0];
+    case 'LDDR': return [0xED,0xB8];
+    case 'LDI': return [0xED,0xA0];
+    case 'LDD': return [0xED,0xA8];
+    case 'CPI': return [0xED,0xA1];
+    case 'CPIR': return [0xED,0xB1];
+
+    case 'LD': return asmLD(ops, addr, labels, pass, getN8, getN16, getLabel);
+    case 'PUSH': {
+      const r = ops[0].toUpperCase();
+      const m={BC:0xC5,DE:0xD5,HL:0xE5,AF:0xF5,IX:[0xDD,0xE5],IY:[0xFD,0xE5]};
+      if (!m[r]) throw new Error('Bad PUSH');
+      return Array.isArray(m[r])?m[r]:[m[r]];
+    }
+    case 'POP': {
+      const r = ops[0].toUpperCase();
+      const m={BC:0xC1,DE:0xD1,HL:0xE1,AF:0xF1,IX:[0xDD,0xE1],IY:[0xFD,0xE1]};
+      if (!m[r]) throw new Error('Bad POP');
+      return Array.isArray(m[r])?m[r]:[m[r]];
+    }
+    case 'EX': {
+      const a=ops[0].toUpperCase(), b=ops[1].toUpperCase();
+      if (a==='DE'&&b==='HL') return [0xEB];
+      if (a==='AF'&&b==="AF'") return [0x08];
+      if (a==='(SP)'&&b==='HL') return [0xE3];
+      if (a==='(SP)'&&b==='IX') return [0xDD,0xE3];
+      if (a==='(SP)'&&b==='IY') return [0xFD,0xE3];
+      throw new Error('Bad EX');
+    }
+
+    case 'ADD': return asmALU('ADD', ops, addr, labels, pass, getN8, getN16);
+    case 'ADC': return asmALU('ADC', ops, addr, labels, pass, getN8, getN16);
+    case 'SUB': return asmALU('SUB', ops, addr, labels, pass, getN8, getN16);
+    case 'SBC': return asmALU('SBC', ops, addr, labels, pass, getN8, getN16);
+    case 'AND': return asmALU('AND', ops, addr, labels, pass, getN8, getN16);
+    case 'XOR': return asmALU('XOR', ops, addr, labels, pass, getN8, getN16);
+    case 'OR':  return asmALU('OR',  ops, addr, labels, pass, getN8, getN16);
+    case 'CP':  return asmALU('CP',  ops, addr, labels, pass, getN8, getN16);
+
+    case 'INC': return asmINCDEC('INC', ops, getN8, getN16, addr, labels, pass);
+    case 'DEC': return asmINCDEC('DEC', ops, getN8, getN16, addr, labels, pass);
+
+    case 'JP': return asmJP(ops, addr, labels, pass, getN16, rel);
+    case 'JR': return asmJR(ops, addr, labels, pass, rel);
+    case 'DJNZ': return [0x10, rel(ops[0])];
+    case 'CALL': return asmCALL(ops, addr, labels, pass, getN16);
+    case 'RET': return asmRET(ops);
+    case 'RST': { const v=getN8(ops[0])&0x38; return [0xC7|v]; }
+
+    case 'RLC': case 'RRC': case 'RL': case 'RR': case 'SLA': case 'SRA': case 'SRL':
+    case 'BIT': case 'SET': case 'RES':
+      return asmBitOp(mnem, ops, addr, labels, pass, getN8);
+
+    case 'IN': {
+      const a=ops[0].toUpperCase(), b=ops[1].toUpperCase();
+      if (a==='A') return [0xDB, getN8(b.replace(/[()]/g,''))];
+      const r=REGS8[a]; if(r===undefined) throw new Error('Bad IN');
+      return [0xED, 0x40|(r<<3)];
+    }
+    case 'OUT': {
+      const a=ops[0].toUpperCase(), b=ops[1].toUpperCase();
+      if (b==='A') return [0xD3, getN8(a.replace(/[()]/g,''))];
+      return [0xED, 0x41];
+    }
+    default: throw new Error(`Unknown mnemonic: ${mnem}`);
+  }
+}
+
+function splitOps(raw) {
+  // Split on commas but not inside parens
+  const ops = [];
+  let depth = 0, cur = '';
+  for (const ch of raw) {
+    if (ch==='(') depth++;
+    if (ch===')') depth--;
+    if (ch===',' && depth===0) { ops.push(cur.trim()); cur=''; }
+    else cur += ch;
+  }
+  if (cur.trim()) ops.push(cur.trim());
+  return ops;
+}
+
+function asmLD(ops, addr, labels, pass, getN8, getN16, getLabel) {
+  const dst = ops[0].toUpperCase().trim();
+  const src = ops[1].toUpperCase().trim();
+
+  // LD r, r' (8-bit)
+  if (dst in REGS8 && src in REGS8) {
+    return [0x40 | (REGS8[dst]<<3) | REGS8[src]];
+  }
+  // LD r, n
+  if (dst in REGS8 && !/\(/.test(src)) {
+    const bases={A:0x3E,B:0x06,C:0x0E,D:0x16,E:0x1E,H:0x26,L:0x2E};
+    const n = (src in labels) ? labels[src] : parseNum(src);
+    return [bases[dst], n&0xFF];
+  }
+  // LD (HL), r
+  if (dst==='(HL)' && src in REGS8) return [0x70|REGS8[src]];
+  // LD (HL), n
+  if (dst==='(HL)') return [0x36, getN8(src)];
+  // LD r, (HL)
+  if (src==='(HL)' && dst in REGS8) return [0x46|(REGS8[dst]<<3)];
+
+  // LD A, (BC/DE)
+  if (dst==='A'&&src==='(BC)') return [0x0A];
+  if (dst==='A'&&src==='(DE)') return [0x1A];
+  if (dst==='(BC)'&&src==='A') return [0x02];
+  if (dst==='(DE)'&&src==='A') return [0x12];
+
+  // LD rr, nn
+  if (dst in REGS16) {
+    const b=[0x01,0x11,0x21,0x31]; const v=getN16(src);
+    return [b[REGS16[dst]], v&0xFF, (v>>8)&0xFF];
+  }
+  if (dst==='IX') { const v=getN16(src); return [0xDD,0x21,v&0xFF,(v>>8)&0xFF]; }
+  if (dst==='IY') { const v=getN16(src); return [0xFD,0x21,v&0xFF,(v>>8)&0xFF]; }
+
+  // LD SP, HL/IX/IY
+  if (dst==='SP'&&src==='HL') return [0xF9];
+  if (dst==='SP'&&src==='IX') return [0xDD,0xF9];
+  if (dst==='SP'&&src==='IY') return [0xFD,0xF9];
+
+  // LD (nn), A
+  if (/^\(\w+\)$/.test(dst) && src==='A') {
+    const inner=dst.slice(1,-1);
+    if (inner==='BC'||inner==='DE') return dst==='(BC)'?[0x02]:[0x12];
+    const v=getN16(inner); return [0x32,v&0xFF,(v>>8)&0xFF];
+  }
+  // LD A, (nn)
+  if (dst==='A' && /^\(\w+\)$/.test(src)) {
+    const inner=src.slice(1,-1);
+    if (inner==='BC') return [0x0A];
+    if (inner==='DE') return [0x1A];
+    const v=getN16(inner); return [0x3A,v&0xFF,(v>>8)&0xFF];
+  }
+  // LD (nn), HL
+  if (/^\(\w+\)$/.test(dst) && src==='HL') {
+    const v=getN16(dst.slice(1,-1)); return [0x22,v&0xFF,(v>>8)&0xFF];
+  }
+  // LD HL, (nn)
+  if (dst==='HL' && /^\(\w+\)$/.test(src)) {
+    const v=getN16(src.slice(1,-1)); return [0x2A,v&0xFF,(v>>8)&0xFF];
+  }
+  // LD (nn), rr (ED prefix)
+  if (/^\(\w+\)$/.test(dst) && (src==='BC'||src==='DE'||src==='SP')) {
+    const v=getN16(dst.slice(1,-1));
+    const m={BC:0x43,DE:0x53,SP:0x73};
+    return [0xED,m[src],v&0xFF,(v>>8)&0xFF];
+  }
+  // LD rr, (nn)
+  if ((dst==='BC'||dst==='DE'||dst==='SP') && /^\(\w+\)$/.test(src)) {
+    const v=getN16(src.slice(1,-1));
+    const m={BC:0x4B,DE:0x5B,SP:0x7B};
+    return [0xED,m[dst],v&0xFF,(v>>8)&0xFF];
+  }
+  // LD (IX+d), r / LD r, (IX+d)
+  const ixMatch = src.match(/^\(IX([+-]\d+|[+-]0x[0-9A-F]+)?\)$/i);
+  const iyMatch = src.match(/^\(IY([+-]\d+|[+-]0x[0-9A-F]+)?\)$/i);
+  if (ixMatch && dst in REGS8) {
+    const d=(ixMatch[1]?parseInt(ixMatch[1]):0)&0xFF;
+    return [0xDD,0x46|(REGS8[dst]<<3),d];
+  }
+  if (iyMatch && dst in REGS8) {
+    const d=(iyMatch[1]?parseInt(iyMatch[1]):0)&0xFF;
+    return [0xFD,0x46|(REGS8[dst]<<3),d];
+  }
+  const dstIX = dst.match(/^\(IX([+-]\d+|[+-]0x[0-9A-F]+)?\)$/i);
+  const dstIY = dst.match(/^\(IY([+-]\d+|[+-]0x[0-9A-F]+)?\)$/i);
+  if (dstIX && src in REGS8) { const d=(dstIX[1]?parseInt(dstIX[1]):0)&0xFF; return [0xDD,0x70|REGS8[src],d]; }
+  if (dstIY && src in REGS8) { const d=(dstIY[1]?parseInt(dstIY[1]):0)&0xFF; return [0xFD,0x70|REGS8[src],d]; }
+
+  // LD A, I/R
+  if (dst==='A'&&src==='I') return [0xED,0x57];
+  if (dst==='A'&&src==='R') return [0xED,0x5F];
+  if (dst==='I'&&src==='A') return [0xED,0x47];
+  if (dst==='R'&&src==='A') return [0xED,0x4F];
+
+  throw new Error(`Bad LD: ${ops[0]}, ${ops[1]}`);
+}
+
+function asmALU(mnem, ops, addr, labels, pass, getN8, getN16) {
+  const mnOps = {ADD:{A:0x80,HL:0x09},ADC:{A:0x88,HL:[0xED,0x4A]},SUB:{A:0x90},SBC:{A:0x98,HL:[0xED,0x42]},AND:{A:0xA0},XOR:{A:0xA8},OR:{A:0xB0},CP:{A:0xB8}};
+  const bases = mnOps[mnem];
+  let dst=ops[0].toUpperCase(), src=(ops[1]||'').toUpperCase();
+
+  // ADD HL, rr / ADC HL, rr / SBC HL, rr
+  if (dst==='HL'||dst==='IX'||dst==='IY') {
+    const rr=src||dst;
+    if (mnem==='ADD') {
+      if (dst==='HL') { const m={BC:0x09,DE:0x19,HL:0x29,SP:0x39}; if(m[rr]) return [m[rr]]; }
+      if (dst==='IX') { const m={BC:0x09,DE:0x19,IX:0x29,SP:0x39}; if(m[rr]) return [0xDD,m[rr]]; }
+      if (dst==='IY') { const m={BC:0x09,DE:0x19,IY:0x29,SP:0x39}; if(m[rr]) return [0xFD,m[rr]]; }
+    }
+    if (mnem==='ADC'&&dst==='HL') { const m={BC:0x4A,DE:0x5A,HL:0x6A,SP:0x7A}; if(m[rr]) return [0xED,m[rr]]; }
+    if (mnem==='SBC'&&dst==='HL') { const m={BC:0x42,DE:0x52,HL:0x62,SP:0x72}; if(m[rr]) return [0xED,m[rr]]; }
+  }
+
+  // Single operand (SUB/AND/XOR/OR/CP)
+  if (!src && (mnem==='SUB'||mnem==='AND'||mnem==='XOR'||mnem==='OR'||mnem==='CP')) {
+    src=dst; dst='A';
+  }
+
+  const base = bases['A'];
+  if (src in REGS8) return [base|REGS8[src]];
+  if (src==='(HL)') return [base|6];
+
+  // immediate
+  const immOps = {ADD:0xC6,ADC:0xCE,SUB:0xD6,SBC:0xDE,AND:0xE6,XOR:0xEE,OR:0xF6,CP:0xFE};
+  const n = (src in labels) ? labels[src] : parseNum(src);
+  return [immOps[mnem], n&0xFF];
+}
+
+function asmINCDEC(mnem, ops, getN8, getN16, addr, labels, pass) {
+  const r = ops[0].toUpperCase();
+  if (r in REGS8) {
+    const b={A:mnem==='INC'?0x3C:0x3D,B:mnem==='INC'?0x04:0x05,C:mnem==='INC'?0x0C:0x0D,D:mnem==='INC'?0x14:0x15,E:mnem==='INC'?0x1C:0x1D,H:mnem==='INC'?0x24:0x25,L:mnem==='INC'?0x2C:0x2D};
+    return [b[r]];
+  }
+  if (r==='(HL)') return [mnem==='INC'?0x34:0x35];
+  const rr16={BC:[0x03,0x0B],DE:[0x13,0x1B],HL:[0x23,0x2B],SP:[0x33,0x3B]};
+  if (r in rr16) return [rr16[r][mnem==='INC'?0:1]];
+  if (r==='IX') return [0xDD, mnem==='INC'?0x23:0x2B];
+  if (r==='IY') return [0xFD, mnem==='INC'?0x23:0x2B];
+  throw new Error(`Bad INC/DEC: ${r}`);
+}
+
+function asmJP(ops, addr, labels, pass, getN16, rel) {
+  if (ops.length===1) {
+    const t=ops[0].toUpperCase();
+    if (t==='(HL)') return [0xE9];
+    if (t==='(IX)') return [0xDD,0xE9];
+    if (t==='(IY)') return [0xFD,0xE9];
+    const v=getN16(ops[0]); return [0xC3,v&0xFF,(v>>8)&0xFF];
+  }
+  const cc=ops[0].toUpperCase(), target=ops[1];
+  const v=getN16(target);
+  const ccOps={NZ:0xC2,Z:0xCA,NC:0xD2,C:0xDA,PO:0xE2,PE:0xEA,P:0xF2,M:0xFA};
+  if (cc in ccOps) return [ccOps[cc],v&0xFF,(v>>8)&0xFF];
+  // fallback: JP nn
+  const v2=getN16(ops[0]); return [0xC3,v2&0xFF,(v2>>8)&0xFF];
+}
+
+function asmJR(ops, addr, labels, pass, rel) {
+  if (ops.length===1) return [0x18, rel(ops[0])];
+  const cc=ops[0].toUpperCase(), target=ops[1];
+  const ccOps={NZ:0x20,Z:0x28,NC:0x30,C:0x38};
+  if (cc in ccOps) return [ccOps[cc], rel(target)];
+  throw new Error(`Bad JR condition: ${cc}`);
+}
+
+function asmCALL(ops, addr, labels, pass, getN16) {
+  if (ops.length===1) { const v=getN16(ops[0]); return [0xCD,v&0xFF,(v>>8)&0xFF]; }
+  const cc=ops[0].toUpperCase();
+  const ccOps={NZ:0xC4,Z:0xCC,NC:0xD4,C:0xDC,PO:0xE4,PE:0xEC,P:0xF4,M:0xFC};
+  const v=getN16(ops[1]);
+  if (cc in ccOps) return [ccOps[cc],v&0xFF,(v>>8)&0xFF];
+  throw new Error(`Bad CALL condition: ${cc}`);
+}
+
+function asmRET(ops) {
+  if (!ops.length||!ops[0]) return [0xC9];
+  const cc=ops[0].toUpperCase();
+  const ccOps={NZ:0xC0,Z:0xC8,NC:0xD0,C:0xD8,PO:0xE0,PE:0xE8,P:0xF0,M:0xF8};
+  if (cc in ccOps) return [ccOps[cc]];
+  return [0xC9];
+}
+
+function asmBitOp(mnem, ops, addr, labels, pass, getN8) {
+  const rotOps={RLC:0,RRC:1,RL:2,RR:3,SLA:4,SRA:5,SRL:7};
+  if (mnem in rotOps) {
+    const r=ops[0].toUpperCase();
+    const rn = r==='(HL)'?6:(REGS8[r]??0);
+    return [0xCB, (rotOps[mnem]<<3)|rn];
+  }
+  const bitOps={BIT:0x40,RES:0x80,SET:0xC0};
+  const b=getN8(ops[0])&7;
+  const r2=ops[1].toUpperCase();
+  const rn2 = r2==='(HL)'?6:(REGS8[r2]??0);
+  return [0xCB, bitOps[mnem]|(b<<3)|rn2];
+}
+
+// ═══════════════════════════════════════════════
+//  TEST RUNNER
+// ═══════════════════════════════════════════════
+
+function runTestSuite(cpu, testSrc) {
+  const results = [];
+  const lines = testSrc.split('\n');
+  for (const rawLine of lines) {
+    const line = rawLine.replace(/\/\/.*/, '').replace(/;.*/, '').trim();
+    if (!line) continue;
+    // assert reg = value
+    let m = line.match(/^assert\s+(\w+)\s*==?\s*(.+)$/i);
+    if (m) {
+      const reg = m[1].toUpperCase();
+      const expected = parseNum(m[2].trim()) & 0xFFFF;
+      const actual = getRegVal(cpu, reg);
+      results.push({ name: `${reg} == ${fmtHex(expected, reg.length<=2?2:4)}`, pass: actual===expected, expected, actual, reg });
+      continue;
+    }
+    // assert mem[addr] = value
+    m = line.match(/^assert\s+mem\[(.+)\]\s*==?\s*(.+)$/i);
+    if (m) {
+      const addr = parseNum(m[1].trim()) & 0xFFFF;
+      const expected = parseNum(m[2].trim()) & 0xFF;
+      const actual = cpu.mem[addr];
+      results.push({ name: `mem[${fmtHex(addr,4)}] == ${fmtHex(expected,2)}`, pass: actual===expected, expected, actual });
+      continue;
+    }
+    // assert flag
+    m = line.match(/^assert\s+flag\s+(\w+)\s*==?\s*([01])$/i);
+    if (m) {
+      const flag=m[1].toUpperCase(), expected=parseInt(m[2]);
+      const flagMap={S:cpu.fS,Z:cpu.fZ,H:cpu.fH,PV:cpu.fPV,N:cpu.fN,C:cpu.fC};
+      const actual=flagMap[flag]??0;
+      results.push({ name: `flag ${flag} == ${expected}`, pass: actual===expected, expected, actual });
+    }
+  }
+  return results;
+}
+
+function getRegVal(cpu, reg) {
+  const map = {A:()=>cpu.A,B:()=>cpu.B,C:()=>cpu.C,D:()=>cpu.D,E:()=>cpu.E,H:()=>cpu.H,L:()=>cpu.L,
+    F:()=>cpu.F,BC:()=>cpu.BC,DE:()=>cpu.DE,HL:()=>cpu.HL,AF:()=>cpu.AF,
+    IX:()=>cpu.IX,IY:()=>cpu.IY,SP:()=>cpu.SP,PC:()=>cpu.PC};
+  return (map[reg]??(() => 0))();
+}
+
+function fmtHex(v, digits) { return '0x'+v.toString(16).toUpperCase().padStart(digits,'0'); }
+
+// ═══════════════════════════════════════════════
+//  UI
+// ═══════════════════════════════════════════════
+
+let memory = new Uint8Array(65536);
+let cpu = new Z80(memory);
+let prevRegs = {};
+
+function log(msg, cls='log-info') {
+  const el = document.getElementById('console-out');
+  const d = document.createElement('div');
+  d.className = cls;
+  d.textContent = msg;
+  el.appendChild(d);
+  el.scrollTop = el.scrollHeight;
+}
+
+function clearConsole() { document.getElementById('console-out').innerHTML = ''; }
+
+function resetCPU() {
+  memory.fill(0);
+  cpu.reset();
+  prevRegs = {};
+  updateRegDisplay();
+  document.getElementById('halted-ind').classList.remove('show');
+  log('── CPU RESET ──', 'log-info');
+}
+
+function getCode() { return document.getElementById('editor').value; }
+function getTests() { return document.getElementById('tests-editor').value; }
+
+function buildAndLoad() {
+  const src = getCode();
+  const result = assemble(src);
+  if (result.errors.length) {
+    for (const e of result.errors) log('✗ ' + e, 'log-err');
+    return null;
+  }
+  memory.fill(0);
+  cpu.reset();
+  for (let i=0; i<result.bytes.length; i++) {
+    if (result.bytes[i] !== undefined) memory[i] = result.bytes[i];
+  }
+  log(`Assembled ${result.size} bytes  (${Object.keys(result.labels).length} labels)`, 'log-ok');
+  return result;
+}
+
+function runCode() {
+  clearConsole();
+  const result = buildAndLoad();
+  if (!result) return;
+  const maxSteps = parseInt(document.getElementById('max-steps').value);
+  let steps = 0;
+  while (!cpu.halted && steps < maxSteps) {
+    cpu.step();
+    steps++;
+  }
+  if (cpu.halted) {
+    log(`Halted after ${steps} steps`, 'log-ok');
+    document.getElementById('halted-ind').classList.add('show');
+  } else {
+    log(`Stopped after ${maxSteps} steps (no HALT)`, 'log-warn');
+  }
+  updateRegDisplay();
+}
+
+let stepResult = null;
+function stepCode() {
+  if (!stepResult) {
+    clearConsole();
+    stepResult = buildAndLoad();
+    if (!stepResult) return;
+  }
+  if (cpu.halted) { log('CPU is halted', 'log-warn'); return; }
+  const pc = cpu.PC;
+  cpu.step();
+  log(`PC=${fmtHex(pc,4)}  step → PC=${fmtHex(cpu.PC,4)}  A=${fmtHex(cpu.A,2)} BC=${fmtHex(cpu.BC,4)} HL=${fmtHex(cpu.HL,4)}`, 'log-info');
+  if (cpu.halted) {
+    log('HALTED', 'log-ok');
+    document.getElementById('halted-ind').classList.add('show');
+    stepResult = null;
+  }
+  updateRegDisplay();
+}
+
+function runTests() {
+  clearConsole();
+  const result = buildAndLoad();
+  if (!result) return;
+  const maxSteps = parseInt(document.getElementById('max-steps').value);
+  let steps = 0;
+  while (!cpu.halted && steps < maxSteps) { cpu.step(); steps++; }
+  updateRegDisplay();
+
+  const testSrc = getTests();
+  if (!testSrc.trim()) { log('No tests defined', 'log-warn'); return; }
+  const results = runTestSuite(cpu, testSrc);
+  let pass = 0, fail = 0;
+  for (const r of results) {
+    if (r.pass) {
+      log(`  PASS  ${r.name}`, 'log-test-pass');
+      pass++;
+    } else {
+      log(`  FAIL  ${r.name}  (got ${fmtHex(r.actual, r.reg && r.reg.length<=2 ? 2:4)})`, 'log-test-fail');
+      fail++;
+    }
+  }
+  log(`${pass}/${pass+fail} tests passed`, pass===pass+fail?'log-ok':'log-err');
+}
+
+function updateRegDisplay() {
+  const regs = {
+    'MAIN': {
+      'A': fmtHex(cpu.A,2), 'F': fmtHex(cpu.F,2),
+      'B': fmtHex(cpu.B,2), 'C': fmtHex(cpu.C,2),
+      'D': fmtHex(cpu.D,2), 'E': fmtHex(cpu.E,2),
+      'H': fmtHex(cpu.H,2), 'L': fmtHex(cpu.L,2),
+    },
+    'PAIRS': {
+      'AF': fmtHex(cpu.AF,4), 'BC': fmtHex(cpu.BC,4),
+      'DE': fmtHex(cpu.DE,4), 'HL': fmtHex(cpu.HL,4),
+    },
+    'INDEX': {
+      'IX': fmtHex(cpu.IX,4), 'IY': fmtHex(cpu.IY,4),
+      'SP': fmtHex(cpu.SP,4), 'PC': fmtHex(cpu.PC,4),
+    }
+  };
+
+  let html = '';
+  for (const [group, vals] of Object.entries(regs)) {
+    html += `<div class="reg-group"><div class="reg-group-label">${group}</div>`;
+    for (const [name, val] of Object.entries(vals)) {
+      const changed = prevRegs[name] && prevRegs[name] !== val;
+      html += `<div class="reg-row"><span class="reg-name">${name}</span><span class="reg-val${changed?' changed':''}" id="rv-${name}">${val}</span></div>`;
+      prevRegs[name] = val;
+    }
+    html += '</div>';
+  }
+
+  // Flags
+  html += `<div class="reg-group"><div class="reg-group-label">FLAGS</div><div class="flags-row">`;
+  const flags = [{n:'S',v:cpu.fS},{n:'Z',v:cpu.fZ},{n:'H',v:cpu.fH},{n:'PV',v:cpu.fPV},{n:'N',v:cpu.fN},{n:'C',v:cpu.fC}];
+  for (const f of flags) html += `<span class="flag${f.v?' set':''}">${f.n}</span>`;
+  html += '</div></div>';
+
+  // Cycles
+  html += `<div class="reg-group"><div class="reg-group-label">INFO</div>`;
+  html += `<div class="reg-row"><span class="reg-name">CY</span><span class="reg-val">${cpu.cycles}</span></div>`;
+  html += `</div>`;
+
+  document.getElementById('reg-display').innerHTML = html;
+}
+
+// Line numbers
+document.getElementById('editor').addEventListener('input', function() {
+  const lines = this.value.split('\n').length;
+  document.getElementById('line-nums').textContent = Array.from({length:lines},(_,i)=>i+1).join('\n');
+});
+document.getElementById('editor').addEventListener('scroll', function() {
+  document.getElementById('line-nums').scrollTop = this.scrollTop;
+});
+
+// Tab support
+document.getElementById('editor').addEventListener('keydown', function(e) {
+  if (e.key==='Tab') {
+    e.preventDefault();
+    const s=this.selectionStart, end=this.selectionEnd;
+    this.value=this.value.substring(0,s)+'    '+this.value.substring(end);
+    this.selectionStart=this.selectionEnd=s+4;
+    this.dispatchEvent(new Event('input'));
+  }
+});
+
+// ═══════════════════════════════════════════════
+//  EXAMPLES
+// ═══════════════════════════════════════════════
+
+const EXAMPLES = {
+hello: {
+code: `; Hello World - store ASCII values in memory
+    ORG 0x0000
+
+    LD HL, 0x8000   ; destination address
+    LD DE, msg      ; source address
+    LD BC, 13       ; byte count
+    LDIR            ; block copy DE→HL
+    HALT
+
+msg:
+    DB "Hello, World!", 0
+`,
+tests: `; Check first few characters in memory
+assert mem[0x8000] == 0x48  ; 'H'
+assert mem[0x8001] == 0x65  ; 'e'
+assert mem[0x8002] == 0x6C  ; 'l'
+assert mem[0x8003] == 0x6C  ; 'l'
+assert mem[0x8004] == 0x6F  ; 'o'
+assert BC == 0x0000          ; LDIR exhausted BC
+`
+},
+
+loop: {
+code: `; Sum numbers 1..10 using DJNZ loop
+    ORG 0x0000
+
+    LD A, 0         ; accumulator = 0
+    LD B, 10        ; loop counter
+
+LOOP:
+    ADD A, B        ; A += B
+    DJNZ LOOP       ; B--, jump if not zero
+
+    LD (0x8000), A  ; store result
+    HALT
+`,
+tests: `; 1+2+...+10 = 55 = 0x37
+assert A == 55
+assert mem[0x8000] == 55
+assert B == 0
+`
+},
+
+fibonacci: {
+code: `; Compute first 10 Fibonacci numbers into RAM at 0x8000
+    ORG 0x0000
+
+    LD HL, 0x8000   ; output pointer
+    LD B, 10        ; count
+
+    LD D, 0         ; D = prev (F(0))
+    LD E, 1         ; E = curr (F(1))
+
+FIB_LOOP:
+    LD (HL), D      ; store current value
+    INC HL
+
+    LD A, D         ; A = prev
+    ADD A, E        ; A = prev + curr
+    LD D, E         ; prev = curr
+    LD E, A         ; curr = prev + curr
+
+    DJNZ FIB_LOOP
+
+    HALT
+`,
+tests: `; Fibonacci: 0,1,1,2,3,5,8,13,21,34
+assert mem[0x8000] == 0
+assert mem[0x8001] == 1
+assert mem[0x8002] == 1
+assert mem[0x8003] == 2
+assert mem[0x8004] == 3
+assert mem[0x8005] == 5
+assert mem[0x8006] == 8
+assert mem[0x8007] == 13
+assert mem[0x8008] == 21
+assert mem[0x8009] == 34
+`
+},
+
+sort: {
+code: `; Bubble sort - sort 8 bytes at 0x8000
+    ORG 0x0000
+
+    ; Initialize unsorted data
+    LD HL, data
+    LD DE, 0x8000
+    LD BC, 8
+    LDIR
+
+    ; Bubble sort
+    LD B, 7         ; outer loop count
+
+OUTER:
+    PUSH BC
+    LD HL, 0x8000
+    LD B, 7         ; inner loop count
+
+INNER:
+    LD A, (HL)
+    INC HL
+    LD C, (HL)      ; C = next byte
+    CP C            ; compare A with C
+    JR C, NO_SWAP   ; jump if A < C (already ordered)
+    JR Z, NO_SWAP
+    ; Swap
+    LD (HL), A
+    DEC HL
+    LD (HL), C
+    INC HL
+
+NO_SWAP:
+    DJNZ INNER
+
+    POP BC
+    DJNZ OUTER
+
+    HALT
+
+data:
+    DB 5, 3, 8, 1, 9, 2, 7, 4
+`,
+tests: `; Should be sorted ascending: 1,2,3,4,5,7,8,9
+assert mem[0x8000] == 1
+assert mem[0x8001] == 2
+assert mem[0x8002] == 3
+assert mem[0x8003] == 4
+assert mem[0x8004] == 5
+assert mem[0x8005] == 7
+assert mem[0x8006] == 8
+assert mem[0x8007] == 9
+`
+}
+};
+
+function loadExample(name) {
+  const ex = EXAMPLES[name];
+  if (!ex) return;
+  document.getElementById('editor').value = ex.code;
+  document.getElementById('tests-editor').value = ex.tests;
+  document.getElementById('editor').dispatchEvent(new Event('input'));
+  stepResult = null;
+  document.getElementById('halted-ind').classList.remove('show');
+  clearConsole();
+  log(`Loaded example: ${name.toUpperCase()}`, 'log-info');
+}
+
+// Init
+loadExample('loop');
+updateRegDisplay();
+log('Z80 Assembly Lab ready. Press RUN or STEP.', 'log-ok');
+log('Write tests in the right panel using: assert A == 0x37', 'log-info');
+</script>
+</body>
+</html>
